@@ -22,8 +22,13 @@ export async function getActiveModels(): Promise<AiModel[]> {
   const admin = getSupabaseAdmin()
   const supabase = admin ?? (await getSupabaseServer())
   if (!supabase) return []
-  const { data } = await supabase.from('ai_models').select('*').eq('is_active', true).order('sort_order')
-  return (data as AiModel[]) ?? []
+  try {
+    const { data, error } = await supabase.from('ai_models').select('*').eq('is_active', true).order('sort_order')
+    if (error) return []
+    return (data as AiModel[]) ?? []
+  } catch {
+    return []
+  }
 }
 
 export async function getAllModels(): Promise<AiModel[]> {
