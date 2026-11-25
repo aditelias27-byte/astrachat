@@ -1,0 +1,29 @@
+-- ============================================================
+-- 002_oauth_setup.sql — Persiapan Login Google & GitHub
+-- Jalankan SETELAH 001_init.sql di SQL Editor Supabase
+-- ============================================================
+-- Tidak ada perubahan skema — hanya pengingat konfigurasi:
+--
+-- 1. Supabase Dashboard → Authentication → URL Configuration
+--    Site URL: https://DOMAIN-ANDA.vercel.app
+--    Redirect URLs tambahkan:
+--      https://DOMAIN-ANDA.vercel.app/auth/callback
+--      http://localhost:3000/auth/callback
+--
+-- 2. Authentication → Providers → Google → Enable:
+--    - Buat OAuth Client di https://console.cloud.google.com/apis/credentials
+--    - Authorized redirect URI:
+--        https://xxxxx.supabase.co/auth/v1/callback
+--    - Copy Client ID & Client Secret ke Supabase
+--
+-- 3. Authentication → Providers → GitHub → Enable:
+--    - Buat OAuth App di https://github.com/settings/developers
+--    - Homepage URL: https://DOMAIN-ANDA.vercel.app
+--    - Authorization callback URL:
+--        https://xxxxx.supabase.co/auth/v1/callback
+--    - Copy Client ID & Client Secret ke Supabase
+--
+-- 4. Kedua provider otomatis membuat row di profiles lewat
+--    trigger handle_new_user() dari 001_init.sql.
+-- ============================================================
+SELECT 'OAuth setup checklist — ikuti komentar di atas' AS info;

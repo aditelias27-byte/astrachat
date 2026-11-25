@@ -343,6 +343,7 @@ export function ChatView() {
 
 // ================= AUTH DIALOG =================
 function AuthDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (v: boolean) => void; onDone: (me: Me) => void }) {
+  const [oauth, setOauth] = useState<{ google: boolean; github: boolean; configured: boolean }>({ google: false, github: false, configured: false })
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -391,11 +392,21 @@ function AuthDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChang
     }
   }
 
-  const loginGoogle = async () => {
+  useEffect(() => {
+    if (!open) return
+    fetch('/api/auth/oauth-status').then((r) => r.json()).then(setOauth).catch(() => {})
+  }, [open])
+
+  const loginOAuth = async (provider: 'google' | 'github') => {
     const { getSupabaseBrowser } = await import('@/lib/supabase/client')
     const supabase = getSupabaseBrowser()
-    if (!supabase) { setMsg('Supabase belum dikonfigurasi.'); return }
-    supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+    if (!supabase) { setMsg('Supabase belum dikonfigurasi. Isi .env.local lalu restart.'); return }
+    setMsg('')
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    })
+    if (error) setMsg(error.message)
   }
 
   return (
@@ -408,10 +419,31 @@ function AuthDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChang
           </DialogDescription>
         </DialogHeader>
 
-        <Button variant="outline" onClick={loginGoogle} className="w-full">
-          <svg className="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81"/></svg>
-          Lanjut dengan Google
-        </Button>
+        {!oauth.configured && (
+          <p className="text-xs text-amber-500 bg-amber-500/10 rounded-lg p-2">
+            Login sosial belum aktif — Owner perlu mengaktifkan provider Google/GitHub di Supabase (lihat README bagian 6).
+          </p>
+        )}
+        {oauth.configured && !oauth.google && !oauth.github && (
+          <p className="text-xs text-amber-500 bg-amber-500/10 rounded-lg p-2">
+            Belum ada provider sosial yang aktif. Aktifkan di Supabase → Authentication → Providers.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" onClick={() => loginOAuth('google')} className="w-full" title={oauth.google ? 'Google aktif' : 'Google belum diaktifkan di Supabase'}>
+            <svg className="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81"/></svg>
+            Google
+          </Button>
+          <Button variant="outline" onClick={() => loginOAuth('github')} className="w-full">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.16 1.18a11 11 0 0 1 5.76 0c2.19-1.49 3.15-1.18 3.15-1.18.63 1.58.24 2.75.12 3.04.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.26 5.66.41.35.77 1.05.77 2.12v3.14c0 .3.2.67.8.55A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+            GitHub
+          </Button>
+        </div>
+        {(oauth.google || oauth.github) && (
+          <p className="text-[11px] text-muted-foreground text-center">
+            {oauth.google && oauth.github ? 'Google & GitHub siap' : oauth.google ? 'Google siap' : 'GitHub siap'} — klik tombol untuk login.
+          </p>
+        )}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <div className="h-px flex-1 bg-border" /> atau email <div className="h-px flex-1 bg-border" />
         </div>

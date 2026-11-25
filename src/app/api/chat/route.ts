@@ -33,7 +33,16 @@ export async function POST(req: NextRequest) {
 
   // ---- resolve model ----
   const models = await getActiveModels()
-  const model = models.find((m) => m.model_id === body.modelId)
+  let model = models.find((m) => m.model_id === body.modelId)
+  if (!model && body.modelId === 'astra-brain') {
+    model = {
+      id: 'astra-brain', provider: 'astrachat', model_id: 'astra-brain',
+      display_name: 'AstraBrain (Bawaan)', description: null, icon_url: null,
+      is_active: true, is_free: true, is_vision: false, is_reasoning: false,
+      min_plan: 'free', price_input_per_1m: 0, price_output_per_1m: 0,
+      max_tokens: 4096, temperature_default: 0.7, sort_order: -1, system_prompt: null,
+    }
+  }
   if (!model) {
     return Response.json({ error: 'Model ini sedang dinonaktifkan oleh Owner' }, { status: 403 })
   }
@@ -118,7 +127,51 @@ export async function POST(req: NextRequest) {
     : body.message
   history.push({ role: 'user', content: userContent })
 
+  // ---- AstraBrain fallback: jika tidak ada API key aktif, jawab dari pengetahuan terlatih ----
   const keys = await getApiKeys()
+  const hasKey = keys.some((k) => k.is_active)
+  if (!hasKey) {
+    const { askBrain } = await import('@/lib/ai/astra-brain')
+    const answer = askBrain(body.message)
+    const label = 'astra-brain'
+    const full = answer.ok
+      ? answer.content + '\n\n---\n*Dihasilkan oleh AstraBrain (retrieval dari 6.000 contoh latihan: UltraChat EN, Alpaca GPT-4 ID, OpenCoder Coding). Untuk jawaban model AI penuh, Owner perlu menambahkan API Key di Panel Owner.*'
+      : /[\u4e00-\u9fff]|\b(bagaimana|apa|kenapa|siapa|tolong|jelaskan)\b/i.test(body.message)
+        ? 'Maaf, AstraBrain belum punya pengetahuan yang cocok untuk pertanyaan ini, dan belum ada API Key AI yang dikonfigurasi Owner. Coba pertanyaan lain, atau hubungi Owner untuk menambahkan API Key di Panel Owner.'
+        : 'AstraBrain has no matching knowledge for this question, and no AI API Key is configured yet. Try another question, or ask the Owner to add an API Key in the Owner Panel.'
+    const tIn = estimateTokens(body.message)
+    const tOut = estimateTokens(full)
+    if (admin) {
+      await admin.from('usage_logs').insert({
+        user_id: user?.id ?? null, model_id: label, token_input: tIn, token_output: tOut,
+        cost: 0, status: 'success',
+      }).then(() => {}, () => {})
+    }
+    const enc = new TextEncoder()
+    const brainStream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(sseEncode('meta', { conversationId: conversationId, model: label }))
+        const words = full.split(/(\s+)/)
+        let acc = ''
+        for (const w of words) {
+          acc += w
+          c.enqueue(sseEncode('delta', { content: w }))
+        }
+        c.enqueue(sseEncode('done', { token_input: tIn, token_output: tOut }))
+        if (supabase && conversationId && full) {
+          supabase.from('messages').insert({
+            conversation_id: conversationId, role: 'assistant', content: full,
+            model_used: label, token_input: tIn, token_output: tOut,
+          }).then(() => {}, () => {})
+        }
+        c.close()
+      },
+    })
+    return new Response(brainStream, {
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' },
+    })
+  }
+
   const upstream = await openStream({ model, keys, messages: history })
   if (!upstream.ok || !upstream.reader) {
     if (admin) {

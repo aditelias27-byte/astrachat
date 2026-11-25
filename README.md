@@ -69,3 +69,32 @@ src/
 └── types/
 supabase/migrations/001_init.sql
 ```
+
+## 6. Login Google & GitHub (OAuth)
+
+1. **Supabase Dashboard → Authentication → URL Configuration**
+   - Site URL: `https://DOMAIN-ANDA.vercel.app`
+   - Redirect URLs: tambahkan `https://DOMAIN-ANDA.vercel.app/auth/callback` dan `http://localhost:3000/auth/callback`
+2. **Provider Google**: aktifkan di Supabase → buat OAuth Client di [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → Authorized redirect URI: `https://xxxxx.supabase.co/auth/v1/callback` → copy Client ID & Secret ke Supabase.
+3. **Provider GitHub**: buat OAuth App di [github.com/settings/developers](https://github.com/settings/developers) → Homepage URL: domain Anda → Authorization callback URL: `https://xxxxx.supabase.co/auth/v1/callback` → copy Client ID & Secret ke Supabase.
+4. Selesai — tombol **Google** & **GitHub** di dialog login AstraChat langsung berfungsi.
+
+## 7. AstraBrain — AI bawaan tanpa API Key
+
+AstraChat dilatih dengan retrieval dari 3 dataset HuggingFace (total 6.000 contoh SFT aktif):
+
+| Dataset | Bahasa/Kategori | Jumlah pola |
+|---|---|---|
+| [metythorn/ultrachat](https://huggingface.co/datasets/metythorn/ultrachat) | Inggris | 1.987 |
+| [FreedomIntelligence/alpaca-gpt4-indonesian](https://huggingface.co/datasets/FreedomIntelligence/alpaca-gpt4-indonesian) | Indonesia | 1.997 |
+| [OpenCoder-LLM/opc-sft-stage1](https://huggingface.co/datasets/OpenCoder-LLM/opc-sft-stage1) | Coding | 1.660 |
+
+Model **AstraBrain (Bawaan)** selalu muncul di model picker dan gratis. Ketika tidak ada API key eksternal dikonfigurasi, `/api/chat` otomatis menjawab lewat AstraBrain dengan streaming SSE.
+
+### Melatih ulang AstraBrain dengan data lebih banyak
+```bash
+python3 scripts/prepare-datasets.py   # unduh contoh baru dari HuggingFace (default 2000/kategori)
+python3 scripts/build-knowledge.py    # kompres jadi src/lib/knowledge/brain.json
+npm run build                         # rebuild
+```
+Naikkan angka `2000` di `scripts/prepare-datasets.py` untuk melatih lebih banyak (dataset asli: 800k + 50k + 1M).
