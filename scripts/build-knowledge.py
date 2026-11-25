@@ -8,9 +8,9 @@ os.chdir(os.path.dirname(__file__) + '/../data')
 def keyword(q):
     stop = {'apa','yang','untuk','dengan','dan','the','a','an','of','to','in','is','how','what','can','you','bagaimana','itu','di','ke','dari','pada','adalah','akan','atau','juga','nya','please','me','my','i'}
     words = re.findall(r'[a-zA-Z\u00C0-\u024F]+', q.lower())
-    return [w for w in words if w not in stop and len(w) > 2][:6]
+    return [w for w in words if w not in stop and len(w) > 2][:10]
 
-def summarize(text, n=420):
+def summarize(text, n=600):
     text = re.sub(r'\s+', ' ', text).strip()
     return text[:n] + ('…' if len(text) > n else '')
 

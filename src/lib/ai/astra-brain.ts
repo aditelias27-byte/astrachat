@@ -42,12 +42,24 @@ export function askBrain(question: string): BrainAnswer {
   const pool = brain[category] ?? []
   const otherPools = Object.entries(brain).filter(([k]) => k !== category).map(([, v]) => v).flat()
 
+  // bobot kata: kata yang sering muncul di semua entri bernilai rendah (mirip IDF)
+  const df = new Map<string, number>()
+  for (const e of [...pool, ...otherPools]) {
+    for (const k of Array.from(new Set(e.kw.split(' ')))) df.set(k, (df.get(k) ?? 0) + 1)
+  }
+  const total = pool.length + otherPools.length || 1
+  const idf = (k: string) => Math.log(1 + total / (1 + (df.get(k) ?? 0)))
+
   const score = (e: Entry, base: number) => {
     const kwTokens = e.kw.split(' ')
     let s = 0
-    for (const t of tokens) for (const k of kwTokens) {
-      if (k === t) s += 3
-      else if (k.startsWith(t) || t.startsWith(k)) s += 1.5
+    for (const t of tokens) {
+      let best = 0
+      for (const k of kwTokens) {
+        if (k === t) best = Math.max(best, 3 * idf(k))
+        else if (k.startsWith(t) || t.startsWith(k)) best = Math.max(best, 1.5 * idf(k))
+      }
+      s += best
     }
     return s * base
   }
@@ -55,9 +67,15 @@ export function askBrain(question: string): BrainAnswer {
   const scored = [
     ...pool.map((e) => ({ e, s: score(e, 1) })),
     ...otherPools.map((e) => ({ e, s: score(e, 0.6) })),
-  ].filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 3)
+  ].filter((x) => x.s > 0).sort((a, b) => b.s - a.s)
 
-  if (scored.length === 0 || scored[0].s < 3) {
+  // butuh minimal 2 kata kunci yang cocok kuat agar jawaban relevan
+  const strongMatch = tokens.filter((t) => {
+    const kwHit = pool.some((e) => e.kw.split(' ').some((k) => k === t || k.startsWith(t) || t.startsWith(k)))
+    return kwHit
+  }).length
+
+  if (scored.length === 0 || scored[0].s < 5 || strongMatch < 1) {
     return { ok: false, content: '', category, matched: 0 }
   }
 

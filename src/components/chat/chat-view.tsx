@@ -77,14 +77,13 @@ export function ChatView() {
   // ---- streaming send ----
   const send = useCallback(
     async (text: string, attachments: { name: string; type: string; dataUrl?: string }[] = [], historyOverride?: ChatMessage[]) => {
-      if (!selectedModel) {
-        toast({ title: 'Pilih model dulu', variant: 'error' })
-        return
-      }
+      // fallback: pakai model terpilih, atau model pertama, atau AstraBrain
+      const effectiveModel = selectedModel ?? useChatStore.getState().models[0]?.model_id ?? 'astra-brain'
+      if (!selectedModel) setSelectedModel(effectiveModel)
       const userMsg: ChatMessage = { id: uid(), role: 'user', content: text, attachments }
       const aiId = uid()
       const baseHistory = historyOverride ?? [...useChatStore.getState().messages.filter((m) => !m.error)]
-      const aiMsg: ChatMessage = { id: aiId, role: 'assistant', content: '', model_used: selectedModel, pending: true }
+      const aiMsg: ChatMessage = { id: aiId, role: 'assistant', content: '', model_used: effectiveModel, pending: true }
       setMessages([...baseHistory, userMsg, aiMsg])
       setStreaming(true)
       const controller = new AbortController()
@@ -97,7 +96,7 @@ export function ChatView() {
           body: JSON.stringify({
             conversationId: isGuest ? null : activeId,
             message: text,
-            modelId: selectedModel,
+            modelId: effectiveModel,
             attachments,
             guestHistory: baseHistory.slice(-20).map((m) => ({ id: m.id, role: m.role, content: m.content })),
             guestCount,
