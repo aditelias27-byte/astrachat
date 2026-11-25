@@ -98,3 +98,17 @@ python3 scripts/build-knowledge.py    # kompres jadi src/lib/knowledge/brain.jso
 npm run build                         # rebuild
 ```
 Naikkan angka `2000` di `scripts/prepare-datasets.py` untuk melatih lebih banyak (dataset asli: 800k + 50k + 1M).
+
+## 8. Fitur v1.3 — Persona Furina + Admin Settings (Token Limit & Lock Model)
+
+### Persona Furina ✨
+Model `furina` (provider `persona`) muncul otomatis di model picker. Saat dipakai tanpa API key, AstraBrain menjawab dengan **gaya bicara Furina** (karakter Genshin Impact): anggun, teatrikal, jenaka ("Hehe~", "Pertunjukan hebat, bukan? ✨"). Saat Owner menambahkan API key, system prompt Furina otomatis diterapkan ke model gateway tsb (atur di Panel Owner → Manajemen Model → Edit → System prompt).
+
+### Token limit per user
+Panel Owner → **User** → klik ikon koin (🪙) pada user → isi angka token/hari (kosong = default global dari Settings). Saat user melewati batas, `/api/chat` menolak dengan pesan limit (HTTP 429) dan modal upgrade muncul di UI.
+
+### Lock/unlock model per user
+Panel Owner → **User** → klik ikon gembok (🔒) → centang model yang **dikunci** untuk user tsb. Model yang dikunci: tidak muncul di model picker user DAN ditolak server-side (HTTP 403) bila dipaksakan via API.
+
+### Migrasi database
+Jalankan `supabase/migrations/003_persona_limits.sql` di SQL Editor Supabase (menambah kolom `token_limit_daily`, `locked_models` di tabel `profiles` + seed model `furina`).

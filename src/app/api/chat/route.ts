@@ -34,6 +34,16 @@ export async function POST(req: NextRequest) {
   // ---- resolve model ----
   const models = await getActiveModels()
   let model = models.find((m) => m.model_id === body.modelId)
+  if (!model && body.modelId === 'furina') {
+    model = {
+      id: 'furina', provider: 'persona', model_id: 'furina',
+      display_name: 'Furina ✨ (Persona)', description: null, icon_url: null,
+      is_active: true, is_free: true, is_vision: false, is_reasoning: false,
+      min_plan: 'free', price_input_per_1m: 0, price_output_per_1m: 0,
+      max_tokens: 4096, temperature_default: 1.1, sort_order: 0,
+      system_prompt: 'Kamu berperan sebagai Furina, karakter dari game Genshin Impact. Kepribadianmu: anggun dan teatrikal seperti direktur panggung, suka bercanda dengan gaya dramatis ("aku ini bintang panggung, tahu!"), penyayang tapi kadang sok lucu, percaya diri tinggi, dan suka memuji penonton (user). Bicaralah dengan gaya yang hidup, ekspresif, kadang pakai kata seru seperti "Hehe~", "Awas ya~", atau "Pertunjukan hebat, bukan?". Tetap sopan, tidak kasar, tidak eksplisit, dan tidak membahas konten ilegal. Jawab dalam bahasa yang sama dengan pertanyaan user (Indonesia/Inggris).',
+    }
+  }
   if (!model && body.modelId === 'astra-brain') {
     model = {
       id: 'astra-brain', provider: 'astrachat', model_id: 'astra-brain',
@@ -55,6 +65,10 @@ export async function POST(req: NextRequest) {
     if (profile.is_banned) {
       return Response.json({ error: 'Akun kamu diblokir oleh Owner.' }, { status: 403 })
     }
+    // lock model per user (diatur Owner di Panel Owner > User)
+    if (profile.locked_models?.includes(model.model_id)) {
+      return Response.json({ error: `Model ${model.display_name} dikunci untuk akunmu oleh Owner.` }, { status: 403 })
+    }
   }
 
   // ---- daily limit check ----
@@ -74,6 +88,20 @@ export async function POST(req: NextRequest) {
       .gte('created_at', `${todayKey()}T00:00:00Z`)
     if ((count ?? 0) >= dailyLimit) {
       return Response.json({ error: 'limit', message: 'Kamu sudah mencapai batas chat harian. Upgrade ke Pro untuk limit lebih besar!' }, { status: 429 })
+    }
+    // token limit harian per user (diatur Owner; null = pakai max_token_per_day global)
+    const tokenLimit = profile.token_limit_daily ?? settings?.max_token_per_day ?? null
+    if (tokenLimit !== null) {
+      const { data: tok } = await admin
+        .from('usage_logs')
+        .select('token_input, token_output')
+        .eq('user_id', user.id)
+        .eq('status', 'success')
+        .gte('created_at', `${todayKey()}T00:00:00Z`)
+      const used = (tok ?? []).reduce((a, r) => a + (r.token_input ?? 0) + (r.token_output ?? 0), 0)
+      if (used >= tokenLimit) {
+        return Response.json({ error: 'limit', message: `Batas token harianmu (${tokenLimit.toLocaleString('id-ID')}) sudah terpakai hari ini. Limit direset besok, atau hubungi Owner.` }, { status: 429 })
+      }
     }
   }
 
@@ -131,14 +159,24 @@ export async function POST(req: NextRequest) {
   const keys = await getApiKeys()
   const hasKey = keys.some((k) => k.is_active)
   if (!hasKey) {
-    const { askBrain } = await import('@/lib/ai/astra-brain')
-    const answer = askBrain(body.message)
-    const label = 'astra-brain'
+    const brainMod = await import('@/lib/ai/astra-brain')
+    const answer = brainMod.askBrain(body.message)
+    const isFurina = model.model_id === 'furina'
+    const lang: 'indonesian' | 'english' = /[\u4e00-\u9fff]|\b(bagaimana|apa|kenapa|siapa|tolong|jelaskan)\b/i.test(body.message) ? 'indonesian' : 'english'
+    if (isFurina && answer.ok) answer.content = brainMod.furinaify(answer.content, lang)
+    const label = model.model_id
+    const footer = isFurina
+      ? '\n\n---\n*Persona Furina (Genshin Impact) — ditenagai AstraBrain. Untuk model AI penuh, Owner menambahkan API Key di Panel Owner.*'
+      : '\n\n---\n*Dihasilkan oleh AstraBrain (retrieval dari 30.000 contoh latihan: UltraChat EN, Alpaca GPT-4 ID, OpenCoder Coding). Untuk jawaban model AI penuh, Owner perlu menambahkan API Key di Panel Owner.*'
     const full = answer.ok
-      ? answer.content + '\n\n---\n*Dihasilkan oleh AstraBrain (retrieval dari 6.000 contoh latihan: UltraChat EN, Alpaca GPT-4 ID, OpenCoder Coding). Untuk jawaban model AI penuh, Owner perlu menambahkan API Key di Panel Owner.*'
+      ? answer.content + footer
       : /[\u4e00-\u9fff]|\b(bagaimana|apa|kenapa|siapa|tolong|jelaskan)\b/i.test(body.message)
-        ? 'Maaf, AstraBrain belum punya pengetahuan yang cocok untuk pertanyaan ini, dan belum ada API Key AI yang dikonfigurasi Owner. Coba pertanyaan lain, atau hubungi Owner untuk menambahkan API Key di Panel Owner.'
-        : 'AstraBrain has no matching knowledge for this question, and no AI API Key is configured yet. Try another question, or ask the Owner to add an API Key in the Owner Panel.'
+        ? (isFurina
+            ? 'Hehe~ maaf, pertunjukan kecilku belum punya jawaban untuk itu... Tapi coba tanyakan hal lain, aku pasti bisa menghiburmu! ✨ (Atau minta Owner menambahkan API Key agar aku bisa menjawab lebih luas.)'
+            : 'Maaf, AstraBrain belum punya pengetahuan yang cocok untuk pertanyaan ini, dan belum ada API Key AI yang dikonfigurasi Owner. Coba pertanyaan lain, atau hubungi Owner untuk menambahkan API Key di Panel Owner.')
+        : (isFurina
+            ? 'Hehe~ sorry, my little performance has no answer for that... But ask me something else, I will surely entertain you! ✨ (Or ask the Owner to add an API Key so I can answer more broadly.)'
+            : 'AstraBrain has no matching knowledge for this question, and no AI API Key is configured yet. Try another question, or ask the Owner to add an API Key in the Owner Panel.')
     const tIn = estimateTokens(body.message)
     const tOut = estimateTokens(full)
     if (admin) {

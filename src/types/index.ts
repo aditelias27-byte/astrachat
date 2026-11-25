@@ -9,6 +9,8 @@ export interface Profile {
   role: UserRole
   is_banned: boolean
   daily_limit: number | null
+  token_limit_daily: number | null
+  locked_models: string[] | null
   total_token_used: number
   created_at: string
 }

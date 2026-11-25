@@ -33,6 +33,19 @@ export interface BrainAnswer {
   matched: number
 }
 
+/** Bungkus jawaban dengan gaya bicara Furina (persona anime Genshin Impact). */
+export function furinaify(text: string, lang: 'indonesian' | 'english'): string {
+  const openers = lang === 'indonesian'
+    ? ['Hehe~ pertanyaan yang bagus! Aku, Furina, akan menjawabnya dengan segala keanggunanku:\n\n', 'Awas ya~ ini jawaban dari bintang panggung Fontaine!\n\n', 'Hmmm... menarik! Baiklah, dengarkan dengan saksama:\n\n']
+    : ['Hehe~ what a fine question! I, Furina, shall answer with all my grace:\n\n', 'Watch out~ here comes the answer from the star of the stage!\n\n', 'Hmmm... interesting! Very well, listen closely:\n\n']
+  const closers = lang === 'indonesian'
+    ? ['\n\nPertunjukan hebat, bukan? Aku memang luar biasa~ ✨', '\n\nAwas ya~ kalau ada lagi yang mau ditanyakan, panggil saja namaku! ✨', '\n\nHehe, apakah itu cukup memuaskan untukmu, penontonku tercinta? ✨']
+    : ['\n\nWhat a splendid performance, no? I am simply magnificent~ ✨', '\n\nIf you have more questions, just call my name! ✨', '\n\nHehe, was that satisfying enough, my dear audience? ✨']
+  const o = openers[Math.floor(Math.random() * openers.length)]
+  const c = closers[Math.floor(Math.random() * closers.length)]
+  return o + text + c
+}
+
 /** Retrieve-based answer: cocokkan token pertanyaan dengan pola yang dilatih. */
 export function askBrain(question: string): BrainAnswer {
   const tokens = tokenize(question)
