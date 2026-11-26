@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from '@/store/toast'
 import type { ApiKeyConfig } from '@/types'
 
-const PROVIDERS = ['clouvia', 'openai', 'anthropic', 'google', 'openrouter', 'custom']
+const PROVIDERS = ['clouvia', 'openai', 'anthropic', 'google', 'openrouter', 'xingchi', 'custom']
 
 export function KeysManager() {
   const [keys, setKeys] = useState<ApiKeyConfig[]>([])
@@ -62,7 +62,11 @@ export function KeysManager() {
             <label className="text-xs text-muted-foreground">Provider</label>
             <select
               value={form.provider_name}
-              onChange={(e) => setForm({ ...form, provider_name: e.target.value })}
+              onChange={(e) => setForm({
+                ...form,
+                provider_name: e.target.value,
+                base_url: e.target.value === 'xingchi' ? 'https://api.xingchiapi.com/v1' : form.base_url,
+              })}
               className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
             >
               {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}

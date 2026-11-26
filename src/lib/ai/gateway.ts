@@ -27,6 +27,13 @@ export function pickKeys(model: AiModel, keys: ApiKeyConfig[]): ApiKeyConfig[] {
   return [...sorted(exact), ...sorted(providerWide), ...sorted(any)]
 }
 
+/** Provider yang memakai OpenAI Responses API (bukan chat/completions). */
+const RESPONSES_API_PROVIDERS = new Set(['xingchi', 'xingchiapi', 'responses'])
+
+function isResponsesProvider(provider: string): boolean {
+  return RESPONSES_API_PROVIDERS.has(provider.toLowerCase())
+}
+
 /** Open the upstream SSE stream, trying keys in order (fallback). */
 export async function openStream(opts: GatewayCallOptions): Promise<GatewayResult> {
   const keys = pickKeys(opts.model, opts.keys)
@@ -41,24 +48,45 @@ export async function openStream(opts: GatewayCallOptions): Promise<GatewayResul
       continue
     }
     try {
-      const res = await fetch(`${key.base_url.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
+      const useResponses = isResponsesProvider(key.provider_name) || isResponsesProvider(opts.model.provider)
+      const url = `${key.base_url.replace(/\/$/, '')}${useResponses ? '/responses' : '/chat/completions'}`
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      }
+      let body: string
+      if (useResponses) {
+        // Gateway tipe xingchiapi hanya mengizinkan client coding — kirim header Codex CLI
+        headers['User-Agent'] = 'codex_cli_rs/0.21.0'
+        headers['originator'] = 'codex_cli_rs'
+        const systemText = opts.messages
+          .filter((m) => m.role === 'system')
+          .map((m) => (typeof m.content === 'string' ? m.content : ''))
+          .join('\n\n')
+        const chat = opts.messages.filter((m) => m.role !== 'system')
+        body = JSON.stringify({
+          model: opts.model.model_id,
+          instructions: systemText || undefined,
+          input: chat.map((m) => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: [{ type: 'input_text', text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
+          })),
+          max_output_tokens: opts.maxTokens ?? opts.model.max_tokens,
+          stream: true,
+        })
+      } else {
+        body = JSON.stringify({
           model: opts.model.model_id,
           messages: opts.messages,
           stream: true,
           temperature: opts.temperature ?? opts.model.temperature_default,
           max_tokens: opts.maxTokens ?? opts.model.max_tokens,
-        }),
-        signal: opts.signal,
-      })
+        })
+      }
+      const res = await fetch(url, { method: 'POST', headers, body, signal: opts.signal })
       if (!res.ok || !res.body) {
         const text = await res.text().catch(() => '')
-        lastError = `HTTP ${res.status} dari ${key.base_url}: ${text.slice(0, 300)}`
+        lastError = `HTTP ${res.status} dari ${url}: ${text.slice(0, 300)}`
         continue
       }
       return { ok: true, reader: res.body.getReader(), keyUsed: key }
@@ -70,12 +98,23 @@ export async function openStream(opts: GatewayCallOptions): Promise<GatewayResul
   return { ok: false, error: lastError || 'Semua API Key gagal.' }
 }
 
-/** Parse one SSE line into delta content / usage. Returns null when not a data chunk. */
+/** Parse one SSE line into delta content / usage. Supports chat.completions AND Responses API. Returns null when not a data chunk. */
 export function parseSseChunk(json: string): { content?: string; usage?: { prompt_tokens?: number; completion_tokens?: number } } | null {
   try {
     const data = JSON.parse(json)
+    // format chat.completions
     const content = data.choices?.[0]?.delta?.content
-    return { content: typeof content === 'string' ? content : undefined, usage: data.usage }
+    if (typeof content === 'string') return { content, usage: data.usage }
+    // format Responses API: event response.output_text.delta -> { delta: "..." }
+    if (data.type === 'response.output_text.delta' && typeof data.delta === 'string') {
+      return { content: data.delta }
+    }
+    // format Responses API: response.completed -> usage
+    if (data.type === 'response.completed' && data.response?.usage) {
+      const u = data.response.usage
+      return { usage: { prompt_tokens: u.input_tokens, completion_tokens: u.output_tokens } }
+    }
+    return null
   } catch {
     return null
   }

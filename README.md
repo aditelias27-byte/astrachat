@@ -134,3 +134,13 @@ select email, role from public.profiles where role in ('admin','owner');
 ```
 
 > Role hanya bisa diubah lewat Panel Owner (server-side, tercatat di audit log) — user biasa tidak bisa mengangkat dirinya sendiri.
+
+## 10. Provider XingchiAPI (Responses API)
+
+Gateway `https://api.xingchiapi.com/v1` (model `gpt-6.1-sol`) **tidak mendukung** `/v1/chat/completions` — hanya **Responses API** (`/v1/responses`) dan hanya menerima client coding (Codex CLI dll).
+
+AstraChat sudah mendukungnya: di Panel Owner → API & Model, pilih provider **`xingchi`** (Base URL otomatis terisi `https://api.xingchiapi.com/v1`), tempel API key, simpan. Gateway layer otomatis:
+- memakai endpoint `/responses` dengan format Responses API,
+- mengirim header `User-Agent: codex_cli_rs` + `originator: codex_cli_rs` (syarat gateway),
+- menerjemahkan streaming `response.output_text.delta` → SSE AstraChat,
+- membaca usage `input_tokens/output_tokens` untuk hitung biaya.
