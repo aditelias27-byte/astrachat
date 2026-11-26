@@ -112,3 +112,25 @@ Panel Owner → **User** → klik ikon gembok (🔒) → centang model yang **di
 
 ### Migrasi database
 Jalankan `supabase/migrations/003_persona_limits.sql` di SQL Editor Supabase (menambah kolom `token_limit_daily`, `locked_models` di tabel `profiles` + seed model `furina`).
+
+## 9. Akun Admin Khusus
+
+Ada 3 cara membuat akun dengan role **admin** (bisa membuka Panel Owner `/owner`):
+
+1. **Via env `ADMIN_EMAILS`** (paling mudah): isi di `.env.local` / Vercel env:
+   ```
+   ADMIN_EMAILS=staff1@contoh.com,staff2@contoh.com
+   ```
+   Lalu daftar lewat halaman chat dengan email tsb → otomatis role `admin`.
+2. **Angkat user yang sudah ada** (SQL, lihat `supabase/migrations/004_admin_accounts.sql`):
+   ```sql
+   update public.profiles set role = 'admin' where email = 'email-admin@contoh.com';
+   ```
+3. **Buat user baru dari Dashboard Supabase** → Authentication → Users → Add user, lalu jalankan SQL di atas untuk mengangkat rolenya.
+
+Cek daftar admin/owner:
+```sql
+select email, role from public.profiles where role in ('admin','owner');
+```
+
+> Role hanya bisa diubah lewat Panel Owner (server-side, tercatat di audit log) — user biasa tidak bisa mengangkat dirinya sendiri.
